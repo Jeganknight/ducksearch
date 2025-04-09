@@ -21,7 +21,7 @@ model_options = {
 
 # Streamlit UI
 st.set_page_config(page_title="DuckDuckGo Search", layout="wide")
-st.title("🔍 DuckDuckGo AI Search")
+st.title("🔍 DuckDuckGo AI Search Using LLM")
 
 # Sidebar for model selection
 with st.sidebar:
