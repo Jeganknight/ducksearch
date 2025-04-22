@@ -1,85 +1,84 @@
 import streamlit as st
-from langchain_groq import ChatGroq
-from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 import os
-from agno.agent import Agent
-from agno.models.groq import Groq
-from agno.tools.duckduckgo import DuckDuckGoTools
+from dotenv import load_dotenv
+import json
 
-# Load environment variables
 load_dotenv()
-groq_api_key = os.getenv("GROQ_API_KEY")
 
-# Available models for user selection
-model_options = {
-    "LLaMA 3.3 70B Versatile (Meta)": "llama-3.3-70b-versatile",
-    "LLaMA 3.1 8B Instant (Meta)": "llama-3.1-8b-instant",
-    "Gemma 2 9B IT (Google)": "gemma2-9b-it",
-    "Qwen-2.5 32B (Alibaba Cloud)": "qwen-2.5-32b"
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-}
-
-# Streamlit UI
-st.set_page_config(page_title="DuckDuckGo Search", layout="wide")
-st.title("🔍 DuckDuckGo AI Search Using LLM")
-
-# Sidebar for model selection
-with st.sidebar:
-    st.header("⚙️ Settings")
-    selected_model = st.selectbox("Select a model:", list(model_options.keys()))
-    st.markdown("---")
-    st.write("📝 **Tip:** Use clear and specific queries for better results!")
-
-# Input field for user query
-user_query = st.text_input(
-    "🔎 Enter your search query:",
-    placeholder="e.g., Best Italian restaurants in Chennai",
-    help="Enter a keyword or question to search using DuckDuckGo"
-)
-
-def generate_search_description(question, model_name):
-    """Generate a DuckDuckGo search description from a user question"""
-    llm = ChatGroq(groq_api_key=groq_api_key, model_name=model_name)
-
-    prompt = f"""
-    Convert this user question into an effective search description for DuckDuckGo:
-    Question: {question}
+def generate_movie_recommendations(movie_name, movie_year, user_preferences=""):
+    """Generate movie recommendations based on input movie and user preferences"""
     
-    The description should be:
-    1. Concise (5-6 sentences max)
-    2. Contain relevant keywords
-    3. Be optimized for web search
-    4. Maintain the original intent
-    
-    Return just the description text, no additional commentary.
-    """
-    try:
-        response = llm.invoke(prompt)
-        return response.content.strip()
-    except Exception as e:
-        return question  # If an error occurs, use the original query as the description
+    sys_instruct = f"""
+You are an expert film analyst with comprehensive knowledge of movies across all genres and eras.
+Your task is to recommend movies similar to {movie_name} ({movie_year}) based on:
+1. Similar plot/story elements
+2. Matching tone and atmosphere
+3. Comparable themes and messages
+4. Similar directorial style or cinematography
+5. Shared cast members when relevant
+{"" if not user_preferences else f"6. User-specified preferences: {user_preferences}"}
 
-if user_query:
-    model_id = model_options[selected_model]
+Provide exactly 5 recommendations with:
+- Movie title (with release year)
+- Brief similarity explanation (what makes it similar)
+- Key shared elements (genre, director, cast, etc.)
+- Where available to stream (Netflix, Prime, etc.)
 
-    # Generate an optimized search description (without displaying it)
-    search_description = generate_search_description(user_query, model_id)
+Format the output in clear markdown with bold titles and bullet points.
+"""
 
-    agent = Agent(
-        model=Groq(id=model_id, api_key=groq_api_key),
-        description=search_description,  # Pass the refined description internally
-        tools=[DuckDuckGoTools()],
-        show_tool_calls=True,
-        markdown=True
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        config=types.GenerateContentConfig(
+            system_instruction=sys_instruct
+        ),
+        contents=f"Recommend movies similar to {movie_name} ({movie_year}) with these preferences: {user_preferences}"
     )
+    
+    return response.text
 
-    st.subheader("🔎 Search Results")
-    with st.spinner("Fetching results... Please wait ⏳"):
-        try:
-            agent_response = agent.run(user_query)
-            if agent_response and hasattr(agent_response, "content"):
-                st.write(agent_response.content)  # Display results
-            else:
-                st.warning("No results found. Try refining your query.")
-        except Exception as e:
-            st.error("⚠️ An error occurred. Please wait a minute and try again.")
+# Streamlit app
+st.title("🎬 Cinematic Companion - Movie Recommendation Engine")
+
+col1, col2 = st.columns(2)
+with col1:
+    movie_name = st.text_input("Movie Name", placeholder="e.g., Inception")
+with col2:
+    movie_year = st.text_input("Release Year", placeholder="e.g., 2010")
+
+user_preferences = st.text_area("What did you particularly enjoy about this movie? (Optional)", 
+                              placeholder="e.g., the mind-bending plot twists, Hans Zimmer's score, the visual effects...",
+                              height=100)
+
+if st.button("Get Recommendations"):
+    if movie_name and movie_year:
+        with st.spinner("Analyzing your movie and finding perfect matches..."):
+            recommendations = generate_movie_recommendations(movie_name, movie_year, user_preferences)
+        
+        st.markdown("## Your Personalized Movie Recommendations")
+        st.markdown(recommendations, unsafe_allow_html=True)
+        
+        st.info("💡 Tip: The more specific your preferences, the better the recommendations!")
+    else:
+        st.error("Please provide at least the movie name and release year")
+
+# Add some sample prompts
+with st.expander("💡 Example Queries"):
+    st.markdown("""
+    - **Movie:** The Dark Knight (2008)  
+      **Preferences:** Heath Ledger's performance, the gritty tone, moral complexity
+    
+    - **Movie:** Parasite (2019)  
+      **Preferences:** social commentary, genre-blending, unexpected plot turns
+    
+    - **Movie:** Pride & Prejudice (2005)  
+      **Preferences:** period romance, strong female lead, witty dialogue
+    """)
+
+# Add footer
+st.markdown("---")
+st.caption("Powered by Google Gemini - Finding your next favorite movie since 2024")
