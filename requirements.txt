@@ -1,5 +1,5 @@
 streamlit
+google-generativeai
 python-dotenv
-langchain_groq
-agno
-duckduckgo-search
+pydantic
+google-genai
